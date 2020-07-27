@@ -1,18 +1,34 @@
 // Modules to control application life and create native browser window
-const {app, BrowserWindow} = require('electron')
-const path = require('path')
-
+const {app, BrowserWindow, Tray} = require('electron')
+const path = require('path');
+const debug = require('electron-debug');
+debug();
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let mainWindow
+let mainWindow;
+let tray = null;
+
+const toggleWindow = () => {
+  if (mainWindow.isVisible()) {
+    mainWindow.hide()
+  } else {
+    showWindow()
+  }
+}
 
 function createWindow () {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    show: false,
+    frame: false,
+    fullscreenable: false,
+    resizable: false,
+    transparent: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      nodeIntegration: true,
+      backgroundThrottling: false
     }
   })
 
@@ -22,19 +38,57 @@ function createWindow () {
   // Open the DevTools.
   // mainWindow.webContents.openDevTools()
 
-  // Emitted when the window is closed.
-  mainWindow.on('closed', function () {
-    // Dereference the window object, usually you would store windows
-    // in an array if your app supports multi windows, this is the time
-    // when you should delete the corresponding element.
-    mainWindow = null
+  mainWindow.on('blur', () => {
+    if (!mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.hide()
+    }
+  });
+}
+
+const createTray = () => {
+  tray = new Tray('dental-insurance.png');
+  tray.setIgnoreDoubleClickEvents(true);
+  tray.on('right-click', toggleWindow);
+  // tray.on('click', () => {
+  //     mainWindow.show()
+  // })
+  tray.on('click', function (event) {
+    toggleWindow()
+
+    // Show devtools when command clicked
+    if (mainWindow.isVisible() && process.defaultApp && event.metaKey) {
+      mainWindow.openDevTools({mode: 'detach'})
+    }
   })
+}
+
+const getWindowPosition = () => {
+  const windowBounds = mainWindow.getBounds()
+  const trayBounds = tray.getBounds()
+
+  // Center window horizontally below the tray icon
+  const x = Math.round(trayBounds.x + (trayBounds.width / 2) - (windowBounds.width / 2))
+
+  // Position window 4 pixels vertically below the tray icon
+  const y = Math.round(trayBounds.y + trayBounds.height + 4)
+
+  return {x: x, y: y}
+}
+
+const showWindow = () => {
+  const position = getWindowPosition()
+  mainWindow.setPosition(position.x, position.y, false)
+  mainWindow.show()
+  mainWindow.focus()
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow)
+app.on('ready', () => {
+  createTray();
+  createWindow();
+})
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function () {
